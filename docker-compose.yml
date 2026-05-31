@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: datatalk
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d datatalk"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/datatalk
+      SECRET_KEY: change_this_secret_key_use_at_least_32_chars
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+      LLM_PROVIDER: mock
+      QUERY_MAX_ROWS: 100
+      DEFAULT_QUERY_LIMIT: 20
+      ENVIRONMENT: development
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
