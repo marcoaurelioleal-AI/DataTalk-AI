@@ -3,7 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.auth import router as auth_router
 from app.api.routes.catalog import router as catalog_router
+from app.api.routes.feedback import router as feedback_router
 from app.api.routes.health import router as health_router
+from app.api.routes.metrics import router as metrics_router
+from app.api.routes.queries import router as queries_router
 from app.core.config import settings
 
 
@@ -25,6 +28,9 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(catalog_router)
+    app.include_router(queries_router)
+    app.include_router(feedback_router)
+    app.include_router(metrics_router)
     return app
 
 
