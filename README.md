@@ -1,5 +1,7 @@
 # DataTalk AI
 
+[![CI](https://github.com/marcoaurelioleal-AI/DataTalk-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/marcoaurelioleal-AI/DataTalk-AI/actions/workflows/ci.yml)
+
 Plataforma de AI Engineering para consultar dados de negocio em linguagem natural com uma camada obrigatoria de seguranca SQL.
 
 O usuario faz uma pergunta, o sistema gera uma consulta, valida as regras antes de qualquer execucao e devolve uma resposta com SQL rastreavel, tabela, sugestao de grafico, historico, feedback e metricas. O dominio demo representa um e-commerce com dados de vendas e marketing.
@@ -187,6 +189,8 @@ Infraestrutura:
 docker compose config
 ```
 
+O GitHub Actions executa essas verificacoes automaticamente em cada push e pull request, com jobs independentes para backend, frontend e Docker Compose.
+
 A suite atual cobre health check, autenticacao, catalogo, validator SQL, provider mock, agente, orquestracao, historico, feedback e metricas no backend. No frontend, cobre login, exibicao de status, formatacao, envio de consulta e feedback.
 
 ## Limites atuais e roadmap
@@ -199,7 +203,7 @@ Proximas evolucoes planejadas:
 2. Fluxo LangGraph para classificar, gerar, validar, executar e resumir consultas como etapas observaveis.
 3. Recuperacao de conhecimento nao estruturado com LlamaIndex.
 4. Observabilidade avancada, tracing e monitoramento de erros.
-5. CI/CD no GitHub Actions e preparacao para deploy cloud.
+5. Preparacao para deploy cloud com ambientes e secrets gerenciados.
 
 ## Valor para portfolio
 
