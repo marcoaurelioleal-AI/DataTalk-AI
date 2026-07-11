@@ -1,5 +1,10 @@
 import re
 
+import sqlglot
+from sqlglot import exp
+from sqlglot.errors import ParseError
+from sqlglot.optimizer.scope import traverse_scope
+
 from app.core.config import settings
 from app.repositories.catalog_repository import INTERNAL_TABLE_NAMES, QUERYABLE_TABLE_NAMES
 from app.schemas.sql_safety import SqlSafetyResult
@@ -19,20 +24,34 @@ PROHIBITED_COMMANDS = (
     "CALL",
     "EXEC",
 )
-
 PROHIBITED_COMMAND_PATTERN = re.compile(rf"\b({'|'.join(PROHIBITED_COMMANDS)})\b", re.IGNORECASE)
 UNSUPPORTED_KEYWORD_PATTERN = re.compile(r"\b(INTO|UNION|INTERSECT|EXCEPT)\b", re.IGNORECASE)
-TABLE_REFERENCE_PATTERN = re.compile(r"\b(?:FROM|JOIN)\s+([a-z_][a-z0-9_]*)\b", re.IGNORECASE)
-TABLE_SOURCE_PATTERN = re.compile(r"\b(?:FROM|JOIN)\b", re.IGNORECASE)
-FROM_CLAUSE_PATTERN = re.compile(
-    r"\bFROM\b(?P<clause>.*?)(?=\bWHERE\b|\bGROUP\s+BY\b|\bORDER\s+BY\b|\bHAVING\b|\bLIMIT\b|$)",
-    re.IGNORECASE,
-)
 LIMIT_KEYWORD_PATTERN = re.compile(r"\bLIMIT\b", re.IGNORECASE)
-LIMIT_VALUE_PATTERN = re.compile(r"\bLIMIT\s+(\d+)\b", re.IGNORECASE)
-SELECT_PROJECTION_PATTERN = re.compile(r"^SELECT\s+(?P<projection>.*?)\s+FROM\b", re.IGNORECASE)
-SELECT_WILDCARD_PATTERN = re.compile(r"(?:^|,)\s*(?:[a-z_][a-z0-9_]*\.)?\*\s*(?:,|$)", re.IGNORECASE)
 COMMENT_PATTERN = re.compile(r"--|/\*|\*/")
+QUERY_START_PATTERN = re.compile(r"^(?:SELECT|WITH)\b", re.IGNORECASE)
+
+ALLOWED_SCHEMA_NAMES = {"public"}
+SYSTEM_SCHEMA_NAMES = {"pg_catalog", "information_schema"}
+DANGEROUS_FUNCTION_NAMES = {
+    "pg_sleep",
+    "pg_read_file",
+    "pg_ls_dir",
+    "lo_export",
+    "dblink",
+    "set_config",
+}
+WRITE_NODE_COMMANDS = (
+    (exp.Insert, "INSERT"),
+    (exp.Update, "UPDATE"),
+    (exp.Delete, "DELETE"),
+    (exp.Drop, "DROP"),
+    (exp.Alter, "ALTER"),
+    (exp.TruncateTable, "TRUNCATE"),
+    (exp.Create, "CREATE"),
+    (exp.Grant, "GRANT"),
+    (exp.Revoke, "REVOKE"),
+    (exp.Merge, "MERGE"),
+)
 
 
 class SqlSafetyService:
@@ -64,14 +83,45 @@ class SqlSafetyService:
 
         normalized_masked_sql = self._normalize_sql(masked_statement_sql)
         prohibited_command = PROHIBITED_COMMAND_PATTERN.search(normalized_masked_sql)
+        if not QUERY_START_PATTERN.match(normalized_masked_sql):
+            if prohibited_command:
+                return self._blocked(
+                    original_sql,
+                    normalized_sql,
+                    f"Comando {prohibited_command.group(1).upper()} detectado.",
+                )
+            return self._blocked(
+                original_sql,
+                normalized_sql,
+                "A query deve ser uma consulta SELECT segura.",
+            )
+
+        expression, error_reason = self._parse_single_statement(statement_sql)
+        if error_reason or expression is None:
+            return self._blocked(original_sql, normalized_sql, error_reason or "SQL invalido ou nao suportado.")
+
+        if any(select.args.get("locks") for select in expression.find_all(exp.Select)):
+            return self._blocked(
+                original_sql,
+                normalized_sql,
+                "Consultas com bloqueio de linhas nao sao permitidas.",
+            )
+
         if prohibited_command:
             return self._blocked(
                 original_sql,
                 normalized_sql,
                 f"Comando {prohibited_command.group(1).upper()} detectado.",
             )
-        if not re.match(r"^SELECT\b", normalized_masked_sql, re.IGNORECASE):
-            return self._blocked(original_sql, normalized_sql, "A query deve comecar com SELECT.")
+
+        ast_write_command = self._find_write_command(expression)
+        if ast_write_command:
+            return self._blocked(
+                original_sql,
+                normalized_sql,
+                f"Comando {ast_write_command} detectado.",
+            )
+
         unsupported_keyword = UNSUPPORTED_KEYWORD_PATTERN.search(normalized_masked_sql)
         if unsupported_keyword:
             return self._blocked(
@@ -79,10 +129,24 @@ class SqlSafetyService:
                 normalized_sql,
                 f"Construcao {unsupported_keyword.group(1).upper()} nao e permitida.",
             )
-        if self._contains_select_wildcard(normalized_masked_sql):
+        if not isinstance(expression, exp.Select):
+            return self._blocked(
+                original_sql,
+                normalized_sql,
+                "A query deve ser uma consulta SELECT segura.",
+            )
+
+        dangerous_function = self._find_dangerous_function(expression)
+        if dangerous_function:
+            return self._blocked(
+                original_sql,
+                normalized_sql,
+                f"Funcao perigosa '{dangerous_function}' nao e permitida.",
+            )
+        if next(expression.find_all(exp.Star), None) is not None:
             return self._blocked(original_sql, normalized_sql, "SELECT * nao e permitido.")
 
-        detected_tables, error_reason = self._detect_tables(normalized_masked_sql)
+        detected_tables, error_reason = self._detect_tables(expression)
         if error_reason:
             return self._blocked(original_sql, normalized_sql, error_reason, detected_tables)
         if not detected_tables:
@@ -108,10 +172,24 @@ class SqlSafetyService:
                     detected_tables,
                 )
 
-        limit_matches = LIMIT_VALUE_PATTERN.findall(normalized_masked_sql)
-        if not LIMIT_KEYWORD_PATTERN.search(normalized_masked_sql):
-            return self._blocked(original_sql, normalized_sql, "A query deve possuir LIMIT.", detected_tables)
-        if len(limit_matches) != 1:
+        if self._has_implicit_comma_join(expression):
+            return self._blocked(
+                original_sql,
+                normalized_sql,
+                "Use JOIN explicito para consultar multiplas tabelas.",
+                detected_tables,
+            )
+
+        limit_node = expression.args.get("limit")
+        if limit_node is None:
+            if LIMIT_KEYWORD_PATTERN.search(normalized_masked_sql):
+                reason = "A query deve possuir exatamente um LIMIT inteiro."
+            else:
+                reason = "A query deve possuir LIMIT."
+            return self._blocked(original_sql, normalized_sql, reason, detected_tables)
+
+        limit_expression = limit_node.expression
+        if not isinstance(limit_expression, exp.Literal) or not limit_expression.is_int:
             return self._blocked(
                 original_sql,
                 normalized_sql,
@@ -119,7 +197,7 @@ class SqlSafetyService:
                 detected_tables,
             )
 
-        limit = int(limit_matches[0])
+        limit = int(limit_expression.this)
         if limit > self.max_rows:
             return self._blocked(
                 original_sql,
@@ -136,24 +214,78 @@ class SqlSafetyService:
             detected_tables=detected_tables,
         )
 
-    def _detect_tables(self, sql: str) -> tuple[tuple[str, ...], str | None]:
-        detected_tables = tuple(dict.fromkeys(match.lower() for match in TABLE_REFERENCE_PATTERN.findall(sql)))
-        if len(TABLE_SOURCE_PATTERN.findall(sql)) != len(TABLE_REFERENCE_PATTERN.findall(sql)):
-            return detected_tables, "Referencia de tabela nao suportada."
+    def _parse_single_statement(self, sql: str) -> tuple[exp.Expr | None, str | None]:
+        try:
+            expressions = sqlglot.parse(sql, read="postgres")
+        except ParseError:
+            return None, "SQL invalido ou nao suportado."
+        if len(expressions) != 1 or expressions[0] is None:
+            return None, "Multiplas statements nao sao permitidas."
+        return expressions[0], None
 
-        for match in FROM_CLAUSE_PATTERN.finditer(sql):
-            if "," in match.group("clause"):
-                return detected_tables, "Use JOIN explicito para consultar multiplas tabelas."
+    def _find_write_command(self, expression: exp.Expr) -> str | None:
+        for node_type, command in WRITE_NODE_COMMANDS:
+            if next(expression.find_all(node_type), None) is not None:
+                return command
+        return None
 
-        return detected_tables, None
+    def _find_dangerous_function(self, expression: exp.Expr) -> str | None:
+        for function in expression.find_all(exp.Func):
+            if isinstance(function, exp.Anonymous):
+                function_name = function.name.lower()
+            else:
+                function_name = function.sql_name().lower()
+            if function_name in DANGEROUS_FUNCTION_NAMES:
+                return function_name
+        return None
 
-    def _contains_select_wildcard(self, sql: str) -> bool:
-        projection_match = SELECT_PROJECTION_PATTERN.search(sql)
-        if not projection_match:
-            return False
+    def _detect_tables(self, expression: exp.Expr) -> tuple[tuple[str, ...], str | None]:
+        try:
+            scopes = list(traverse_scope(expression))
+            physical_table_ids = {
+                id(source)
+                for scope in scopes
+                for _, source in scope.selected_sources.values()
+                if isinstance(source, exp.Table)
+            }
+        except Exception:
+            return (), "Estrutura de fontes SQL nao suportada."
 
-        projection = re.sub(r"^DISTINCT\s+", "", projection_match.group("projection"), flags=re.IGNORECASE)
-        return SELECT_WILDCARD_PATTERN.search(projection) is not None
+        detected_tables: list[str] = []
+
+        for table in expression.find_all(exp.Table):
+            if id(table) not in physical_table_ids:
+                continue
+            table_name = table.name.lower()
+            schema_name = table.db.lower() if table.db else ""
+            catalog_name = table.catalog.lower() if table.catalog else ""
+
+            if catalog_name:
+                return tuple(dict.fromkeys(detected_tables)), "Referencias com catalogo nao sao permitidas."
+            if schema_name in SYSTEM_SCHEMA_NAMES:
+                return (
+                    tuple(dict.fromkeys(detected_tables)),
+                    f"Schema de sistema '{schema_name}' nao pode ser consultado.",
+                )
+            if schema_name and schema_name not in ALLOWED_SCHEMA_NAMES:
+                return (
+                    tuple(dict.fromkeys(detected_tables)),
+                    f"Schema '{schema_name}' nao e permitido.",
+                )
+            detected_tables.append(table_name)
+
+        return tuple(dict.fromkeys(detected_tables)), None
+
+    def _has_implicit_comma_join(self, expression: exp.Expr) -> bool:
+        try:
+            scopes = traverse_scope(expression)
+            return any(
+                join.sql(dialect="postgres").lstrip().startswith(",")
+                for scope in scopes
+                for join in (scope.expression.args.get("joins") or [])
+            )
+        except Exception:
+            return True
 
     def _remove_terminal_semicolon(self, sql: str, masked_sql: str) -> tuple[str, str, str | None]:
         semicolon_indexes = [index for index, character in enumerate(masked_sql) if character == ";"]

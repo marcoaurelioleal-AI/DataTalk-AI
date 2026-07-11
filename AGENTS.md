@@ -80,3 +80,33 @@ O projeto só deve ser considerado pronto quando:
 - Histórico, feedback e métricas funcionarem
 - Testes passarem
 - README explicar arquitetura, segurança e execução
+
+## Controle de escopo e milestones
+
+O projeto deve ser desenvolvido em milestones pequenos e independentes.
+
+Regras obrigatórias:
+
+* Implemente somente o milestone solicitado no prompt atual.
+* Não inicie o próximo milestone automaticamente.
+* Não implemente funcionalidades fora do escopo solicitado.
+* Não faça refatorações amplas sem necessidade direta.
+* Não adicione dependências de produção fora das exigidas pelo milestone.
+* Antes de modificar arquivos, informe brevemente o plano e os arquivos envolvidos.
+* Execute primeiro os testes diretamente relacionados ao milestone.
+* Execute a suíte completa somente ao final do milestone.
+* Não faça commit nem push automaticamente.
+* Ao terminar, pare e aguarde aprovação.
+
+Ao concluir cada milestone, retorne somente:
+
+1. diagnóstico;
+2. arquivos criados;
+3. arquivos alterados;
+4. implementação realizada;
+5. testes executados;
+6. resultados;
+7. limitações restantes;
+8. próximo milestone recomendado.
+
+O próximo milestone deve ser apenas recomendado, nunca iniciado automaticamente.

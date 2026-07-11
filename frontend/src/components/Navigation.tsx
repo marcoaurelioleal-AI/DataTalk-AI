@@ -22,11 +22,11 @@ interface NavigationItem {
 }
 
 const navigationItems: NavigationItem[] = [
-  { label: "VisÃ£o geral", view: "dashboard", icon: LayoutDashboard },
+  { label: "Visão geral", view: "dashboard", icon: LayoutDashboard },
   { label: "Consultar dados", view: "ask", icon: MessageSquareText },
-  { label: "CatÃ¡logo", view: "catalog", icon: BookOpen },
-  { label: "HistÃ³rico", view: "history", icon: History },
-  { label: "MÃ©tricas", view: "metrics", icon: BarChart3 },
+  { label: "Catálogo", view: "catalog", icon: BookOpen },
+  { label: "Histórico", view: "history", icon: History },
+  { label: "Métricas", view: "metrics", icon: BarChart3 },
 ];
 
 export function Navigation({ activeView, onChange }: NavigationProps): JSX.Element {
@@ -35,7 +35,7 @@ export function Navigation({ activeView, onChange }: NavigationProps): JSX.Eleme
       <div className="flex h-20 items-center px-5 md:px-6">
         <BrandMark />
       </div>
-      <nav aria-label="NavegaÃ§Ã£o principal" className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:px-4">
+      <nav aria-label="Navegação principal" className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:px-4">
         {navigationItems.map(({ label, view, icon: Icon }) => {
           const isActive = activeView === view;
           return (

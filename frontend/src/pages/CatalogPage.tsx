@@ -58,15 +58,15 @@ export function CatalogPage(): JSX.Element {
   }, [selectedTable]);
 
   if (error) {
-    return <EmptyState icon={ShieldAlert} title="NÃ£o foi possÃ­vel carregar o catÃ¡logo" description={error} />;
+    return <EmptyState icon={ShieldAlert} title="Não foi possível carregar o catálogo" description={error} />;
   }
 
   return (
     <div className="space-y-7">
       <section>
-        <p className="text-xs font-semibold uppercase tracking-widest text-accent">CatÃ¡logo de dados</p>
-        <h1 className="mt-2 text-2xl font-semibold text-ink md:text-3xl">Tabelas disponÃ­veis para anÃ¡lise</h1>
-        <p className="mt-2 text-sm text-slate-600">O agente usa somente as tabelas expostas neste catÃ¡logo autorizado.</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-accent">Catálogo de dados</p>
+        <h1 className="mt-2 text-2xl font-semibold text-ink md:text-3xl">Tabelas disponíveis para análise</h1>
+        <p className="mt-2 text-sm text-slate-600">O agente usa somente as tabelas expostas neste catálogo autorizado.</p>
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[minmax(15rem,0.7fr)_minmax(0,1.3fr)]">
@@ -89,7 +89,7 @@ export function CatalogPage(): JSX.Element {
                 </span>
               </button>
             ))}
-            {!tables.length && <EmptyState icon={BookOpen} title="Carregando tabelas" description="Buscando o catÃ¡logo autorizado." />}
+            {!tables.length && <EmptyState icon={BookOpen} title="Carregando tabelas" description="Buscando o catálogo autorizado." />}
           </div>
         </article>
 
@@ -106,7 +106,7 @@ export function CatalogPage(): JSX.Element {
                     <tr>
                       <th className="px-5 py-3 font-semibold">Coluna</th>
                       <th className="px-5 py-3 font-semibold">Tipo</th>
-                      <th className="px-5 py-3 font-semibold">DescriÃ§Ã£o</th>
+                      <th className="px-5 py-3 font-semibold">Descrição</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
@@ -122,7 +122,7 @@ export function CatalogPage(): JSX.Element {
               </div>
             </>
           ) : (
-            <EmptyState icon={Database} title="Selecione uma tabela" description="As colunas e os tipos permitidos aparecerÃ£o aqui." />
+            <EmptyState icon={Database} title="Selecione uma tabela" description="As colunas e os tipos permitidos aparecerão aqui." />
           )}
         </article>
       </section>

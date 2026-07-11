@@ -36,11 +36,11 @@ export function MetricsPage(): JSX.Element {
   }, []);
 
   if (error) {
-    return <EmptyState icon={ShieldAlert} title="NÃ£o foi possÃ­vel carregar as mÃ©tricas" description={error} />;
+    return <EmptyState icon={ShieldAlert} title="Não foi possível carregar as métricas" description={error} />;
   }
 
   if (!data) {
-    return <EmptyState icon={BarChart3} title="Carregando mÃ©tricas" description="Calculando os indicadores do seu workspace." />;
+    return <EmptyState icon={BarChart3} title="Carregando métricas" description="Calculando os indicadores do seu workspace." />;
   }
 
   const dailyData = data.queryMetrics.queries_by_day.map((item) => ({ date: item.date, total: item.count }));
@@ -50,15 +50,15 @@ export function MetricsPage(): JSX.Element {
   return (
     <div className="space-y-7">
       <section>
-        <p className="text-xs font-semibold uppercase tracking-widest text-accent">MÃ©tricas</p>
-        <h1 className="mt-2 text-2xl font-semibold text-ink md:text-3xl">Uso, seguranÃ§a e cobertura dos dados</h1>
-        <p className="mt-2 text-sm text-slate-600">Indicadores construÃ­dos a partir do histÃ³rico e do feedback do usuÃ¡rio.</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-accent">Métricas</p>
+        <h1 className="mt-2 text-2xl font-semibold text-ink md:text-3xl">Uso, segurança e cobertura dos dados</h1>
+        <p className="mt-2 text-sm text-slate-600">Indicadores construídos a partir do histórico e do feedback do usuário.</p>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-2">
         <article className="rounded-lg border border-line bg-panel p-5 shadow-panel">
           <h2 className="text-base font-semibold text-ink">Perguntas por dia</h2>
-          <p className="mt-1 text-sm text-slate-500">EvoluÃ§Ã£o do volume de consultas.</p>
+          <p className="mt-1 text-sm text-slate-500">Evolução do volume de consultas.</p>
           <div className="mt-6 h-64">
             {dailyData.length ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -70,13 +70,13 @@ export function MetricsPage(): JSX.Element {
                   <Bar dataKey="total" fill="#157b63" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : <EmptyState icon={BarChart3} title="Sem volume registrado" description="As consultas aparecerÃ£o neste grÃ¡fico." />}
+            ) : <EmptyState icon={BarChart3} title="Sem volume registrado" description="As consultas aparecerão neste gráfico." />}
           </div>
         </article>
 
         <article className="rounded-lg border border-line bg-panel p-5 shadow-panel">
           <h2 className="text-base font-semibold text-ink">Motivos de bloqueio</h2>
-          <p className="mt-1 text-sm text-slate-500">OcorrÃªncias identificadas pelo SQL Safety Validator.</p>
+          <p className="mt-1 text-sm text-slate-500">Ocorrências identificadas pelo SQL Safety Validator.</p>
           <div className="mt-6 h-64">
             {blockedData.length ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -88,13 +88,13 @@ export function MetricsPage(): JSX.Element {
                   <Bar dataKey="total" fill="#e05d5d" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : <EmptyState icon={ShieldAlert} title="Nenhum bloqueio registrado" description="O histÃ³rico de bloqueios aparecerÃ¡ aqui." />}
+            ) : <EmptyState icon={ShieldAlert} title="Nenhum bloqueio registrado" description="O histórico de bloqueios aparecerá aqui." />}
           </div>
         </article>
 
         <article className="rounded-lg border border-line bg-panel p-5 shadow-panel xl:col-span-2">
           <h2 className="text-base font-semibold text-ink">Tabelas mais consultadas</h2>
-          <p className="mt-1 text-sm text-slate-500">Uso das tabelas permitidas pelo catÃ¡logo.</p>
+          <p className="mt-1 text-sm text-slate-500">Uso das tabelas permitidas pelo catálogo.</p>
           <div className="mt-6 h-64">
             {tablesData.length ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -106,7 +106,7 @@ export function MetricsPage(): JSX.Element {
                   <Bar dataKey="total" fill="#168aad" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : <EmptyState icon={BarChart3} title="Sem tabelas consultadas" description="Tabelas usadas em SQL aprovado aparecerÃ£o aqui." />}
+            ) : <EmptyState icon={BarChart3} title="Sem tabelas consultadas" description="Tabelas usadas em SQL aprovado aparecerão aqui." />}
           </div>
         </article>
       </section>

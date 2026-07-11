@@ -42,7 +42,7 @@ export function getApiErrorMessage(error: unknown): string {
       return detail;
     }
   }
-  return "NÃ£o foi possÃ­vel concluir a solicitaÃ§Ã£o. Tente novamente.";
+  return "Não foi possível concluir a solicitação. Tente novamente.";
 }
 
 export async function login(email: string, password: string): Promise<TokenResponse> {

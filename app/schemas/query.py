@@ -23,13 +23,15 @@ class QueryResponseMetadata(BaseModel):
     provider_used: str
     model_used: str
     execution_time_ms: int
+    agent_time_ms: int | None = None
+    database_time_ms: int | None = None
 
 
 class AskQueryResponse(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     query_id: int
-    status: Literal["success", "blocked", "needs_clarification"]
+    status: Literal["success", "blocked", "error", "needs_clarification"]
     answer: str
     generated_sql: str | None
     blocked_reason: str | None = None

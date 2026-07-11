@@ -11,8 +11,8 @@ export function Header({ user, onLogout }: HeaderProps): JSX.Element {
   return (
     <header className="flex min-h-20 items-center justify-between border-b border-line bg-white px-5 md:px-8">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Workspace de anÃ¡lise</p>
-        <p className="mt-1 text-sm font-medium text-ink">Dados de negÃ³cio com SQL validado</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Workspace de análise</p>
+        <p className="mt-1 text-sm font-medium text-ink">Dados de negócio com SQL validado</p>
       </div>
       <div className="flex items-center gap-3">
         <div className="hidden text-right sm:block">

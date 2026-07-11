@@ -32,25 +32,25 @@ export function HistoryPage(): JSX.Element {
   }, []);
 
   if (error) {
-    return <EmptyState icon={ShieldAlert} title="NÃ£o foi possÃ­vel carregar o histÃ³rico" description={error} />;
+    return <EmptyState icon={ShieldAlert} title="Não foi possível carregar o histórico" description={error} />;
   }
 
   return (
     <div className="space-y-7">
       <section className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-accent">HistÃ³rico</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-accent">Histórico</p>
           <h1 className="mt-2 text-2xl font-semibold text-ink md:text-3xl">Consultas registradas</h1>
-          <p className="mt-2 text-sm text-slate-600">Cada solicitaÃ§Ã£o mantÃ©m a pergunta, o SQL, o status e a duraÃ§Ã£o para auditoria.</p>
+          <p className="mt-2 text-sm text-slate-600">Cada solicitação mantém a pergunta, o SQL, o status e a duração para auditoria.</p>
         </div>
         {history && <span className="text-sm font-medium text-slate-500">{history.length.toLocaleString("pt-BR")} registros</span>}
       </section>
 
       <section className="overflow-hidden rounded-lg border border-line bg-panel shadow-panel">
         {!history ? (
-          <EmptyState icon={History} title="Carregando histÃ³rico" description="Buscando as consultas do seu workspace." />
+          <EmptyState icon={History} title="Carregando histórico" description="Buscando as consultas do seu workspace." />
         ) : history.length === 0 ? (
-          <EmptyState icon={History} title="Nenhuma consulta registrada" description="As perguntas feitas ao agente aparecerÃ£o neste histÃ³rico." />
+          <EmptyState icon={History} title="Nenhuma consulta registrada" description="As perguntas feitas ao agente aparecerão neste histórico." />
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-[760px] w-full text-left text-sm">
@@ -59,7 +59,7 @@ export function HistoryPage(): JSX.Element {
                   <th className="px-5 py-3 font-semibold">Pergunta</th>
                   <th className="px-5 py-3 font-semibold">Status</th>
                   <th className="px-5 py-3 font-semibold">Data</th>
-                  <th className="px-5 py-3 font-semibold">DuraÃ§Ã£o</th>
+                  <th className="px-5 py-3 font-semibold">Duração</th>
                   <th className="px-5 py-3 font-semibold">Provider</th>
                 </tr>
               </thead>

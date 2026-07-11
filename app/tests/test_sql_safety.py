@@ -38,11 +38,11 @@ def test_blocks_prohibited_commands(command: str, sql: str) -> None:
     assert result.reason == f"Comando {command} detectado."
 
 
-def test_blocks_query_that_does_not_start_with_select() -> None:
-    result = validator.validate("WITH product_names AS (SELECT name FROM products) SELECT name FROM product_names LIMIT 10")
+def test_blocks_non_select_statement() -> None:
+    result = validator.validate("EXPLAIN SELECT id FROM products LIMIT 10")
 
     assert result.is_valid is False
-    assert result.reason == "A query deve comecar com SELECT."
+    assert result.reason == "A query deve ser uma consulta SELECT segura."
 
 
 def test_blocks_multiple_statements() -> None:
@@ -178,3 +178,138 @@ def test_blocks_select_without_queryable_table() -> None:
 
     assert result.is_valid is False
     assert result.reason == "A query deve consultar ao menos uma tabela permitida."
+
+
+def test_allows_safe_cte() -> None:
+    result = validator.validate(
+        "WITH recent_products AS ("
+        "SELECT id, name FROM products WHERE price > 100"
+        ") "
+        "SELECT id, name FROM recent_products LIMIT 10"
+    )
+
+    assert result.is_valid is True
+    assert result.detected_tables == ("products",)
+
+
+def test_blocks_write_command_inside_cte() -> None:
+    result = validator.validate(
+        "WITH deleted_orders AS ("
+        "DELETE FROM orders WHERE status = 'cancelled' RETURNING id"
+        ") "
+        "SELECT id FROM deleted_orders LIMIT 10"
+    )
+
+    assert result.is_valid is False
+    assert result.reason == "Comando DELETE detectado."
+
+
+def test_allows_safe_subquery() -> None:
+    result = validator.validate(
+        "SELECT name FROM products "
+        "WHERE id IN (SELECT product_id FROM order_items WHERE quantity > 1) "
+        "LIMIT 10"
+    )
+
+    assert result.is_valid is True
+    assert result.detected_tables == ("products", "order_items")
+
+
+def test_allows_public_schema_qualified_table() -> None:
+    result = validator.validate("SELECT p.id, p.name FROM public.products p LIMIT 10")
+
+    assert result.is_valid is True
+    assert result.detected_tables == ("products",)
+
+
+def test_blocks_non_public_schema() -> None:
+    result = validator.validate("SELECT p.id FROM analytics.products p LIMIT 10")
+
+    assert result.is_valid is False
+    assert result.reason == "Schema 'analytics' nao e permitido."
+
+
+@pytest.mark.parametrize("schema_name", ["pg_catalog", "information_schema"])
+def test_blocks_system_schemas(schema_name: str) -> None:
+    result = validator.validate(f"SELECT t.table_name FROM {schema_name}.tables t LIMIT 10")
+
+    assert result.is_valid is False
+    assert result.reason == f"Schema de sistema '{schema_name}' nao pode ser consultado."
+
+
+@pytest.mark.parametrize(
+    "function_name",
+    ["pg_sleep", "pg_read_file", "pg_ls_dir", "lo_export", "dblink", "set_config"],
+)
+def test_blocks_dangerous_functions(function_name: str) -> None:
+    result = validator.validate(f"SELECT {function_name}('test') FROM products LIMIT 1")
+
+    assert result.is_valid is False
+    assert result.reason == f"Funcao perigosa '{function_name}' nao e permitida."
+
+
+def test_blocks_wildcard_inside_aggregate() -> None:
+    result = validator.validate("SELECT COUNT(*) AS total FROM products LIMIT 1")
+
+    assert result.is_valid is False
+    assert result.reason == "SELECT * nao e permitido."
+
+
+@pytest.mark.parametrize(
+    "limit_clause",
+    ["LIMIT ALL", "LIMIT 1 + 1", "LIMIT -1", "LIMIT $1"],
+)
+def test_blocks_non_literal_integer_limit(limit_clause: str) -> None:
+    result = validator.validate(f"SELECT id FROM products {limit_clause}")
+
+    assert result.is_valid is False
+    assert result.reason == "A query deve possuir exatamente um LIMIT inteiro."
+
+
+def test_blocks_row_locking_clause() -> None:
+    result = validator.validate("SELECT id FROM products LIMIT 10 FOR UPDATE")
+
+    assert result.is_valid is False
+    assert result.reason == "Consultas com bloqueio de linhas nao sao permitidas."
+
+
+def test_cte_alias_does_not_hide_internal_table_in_outer_scope() -> None:
+    result = validator.validate(
+        "SELECT u.id FROM users u "
+        "WHERE EXISTS ("
+        "WITH users AS (SELECT id FROM products) "
+        "SELECT id FROM users LIMIT 1"
+        ") "
+        "LIMIT 1"
+    )
+
+    assert result.is_valid is False
+    assert result.reason == "Tabela interna 'users' nao pode ser consultada."
+    assert "users" in result.detected_tables
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT p.id FROM (SELECT id FROM products FOR SHARE) p LIMIT 10",
+        "WITH p AS (SELECT id FROM products FOR SHARE) SELECT id FROM p LIMIT 10",
+        "SELECT p.id FROM (SELECT id FROM products FOR KEY SHARE) p LIMIT 10",
+    ],
+)
+def test_blocks_nested_row_locking_clause(sql: str) -> None:
+    result = validator.validate(sql)
+
+    assert result.is_valid is False
+    assert result.reason == "Consultas com bloqueio de linhas nao sao permitidas."
+
+
+def test_allows_explicit_join_with_multi_argument_function() -> None:
+    result = validator.validate(
+        "SELECT p.id, o.id AS order_id "
+        "FROM products p "
+        "JOIN orders o ON COALESCE(p.id, 0) = o.id "
+        "LIMIT 10"
+    )
+
+    assert result.is_valid is True
+    assert result.detected_tables == ("products", "orders")

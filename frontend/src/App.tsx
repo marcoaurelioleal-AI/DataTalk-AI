@@ -80,7 +80,7 @@ export function App(): JSX.Element {
   if (isCheckingSession) {
     return (
       <main className="grid min-h-screen place-items-center bg-canvas">
-        <LoaderCircle className="animate-spin text-accent" size={26} aria-label="Carregando sessÃ£o" />
+        <LoaderCircle className="animate-spin text-accent" size={26} aria-label="Carregando sessão" />
       </main>
     );
   }
@@ -94,7 +94,7 @@ export function App(): JSX.Element {
       <Suspense
         fallback={
           <div className="grid min-h-80 place-items-center">
-            <LoaderCircle className="animate-spin text-accent" size={24} aria-label="Carregando pÃ¡gina" />
+            <LoaderCircle className="animate-spin text-accent" size={24} aria-label="Carregando página" />
           </div>
         }
       >

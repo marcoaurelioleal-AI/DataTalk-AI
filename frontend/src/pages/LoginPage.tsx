@@ -20,7 +20,7 @@ export function LoginPage({ onLogin }: LoginPageProps): JSX.Element {
     try {
       await onLogin(email, password);
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : "NÃ£o foi possÃ­vel entrar.");
+      setError(loginError instanceof Error ? loginError.message : "Não foi possível entrar.");
     } finally {
       setIsSubmitting(false);
     }
@@ -36,7 +36,7 @@ export function LoginPage({ onLogin }: LoginPageProps): JSX.Element {
         <div className="relative z-10 p-10 text-white">
           <BrandMark compact />
           <h1 className="mt-12 max-w-md text-4xl font-semibold leading-tight">DataTalk AI</h1>
-          <p className="mt-3 max-w-md text-sm leading-6 text-emerald-50/80">Consulta de dados de negÃ³cio com geraÃ§Ã£o de SQL rastreÃ¡vel e validaÃ§Ã£o de seguranÃ§a.</p>
+          <p className="mt-3 max-w-md text-sm leading-6 text-emerald-50/80">Consulta de dados de negócio com geração de SQL rastreável e validação de segurança.</p>
         </div>
       </section>
       <section className="flex min-h-screen items-center justify-center p-5 sm:p-8">
@@ -47,7 +47,7 @@ export function LoginPage({ onLogin }: LoginPageProps): JSX.Element {
           <div className="mt-12 lg:mt-0">
             <p className="text-xs font-semibold uppercase tracking-widest text-accent">Acesso seguro</p>
             <h2 className="mt-3 text-3xl font-semibold text-ink">Entre no seu workspace</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">Use sua conta para consultar os dados e acompanhar as decisÃµes geradas pelo agente.</p>
+            <p className="mt-3 text-sm leading-6 text-slate-600">Use sua conta para consultar os dados e acompanhar as decisões geradas pelo agente.</p>
           </div>
           <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
             <label className="block text-sm font-medium text-ink">

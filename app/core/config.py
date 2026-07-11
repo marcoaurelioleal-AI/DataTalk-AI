@@ -9,6 +9,10 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://postgres:postgres@localhost:5432/datatalk",
         alias="DATABASE_URL",
     )
+    query_database_url: str = Field(
+        default="postgresql+psycopg://datatalk_reader:datatalk_reader@localhost:5432/datatalk",
+        alias="QUERY_DATABASE_URL",
+    )
     secret_key: str = Field(default="change_this_secret_key_use_at_least_32_chars", alias="SECRET_KEY")
     algorithm: str = Field(default="HS256", alias="ALGORITHM")
     access_token_expire_minutes: int = Field(default=60, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
@@ -21,6 +25,8 @@ class Settings(BaseSettings):
 
     query_max_rows: int = Field(default=100, alias="QUERY_MAX_ROWS")
     default_query_limit: int = Field(default=20, alias="DEFAULT_QUERY_LIMIT")
+    query_statement_timeout_ms: int = Field(default=5_000, gt=0, alias="QUERY_STATEMENT_TIMEOUT_MS")
+    query_lock_timeout_ms: int = Field(default=1_000, gt=0, alias="QUERY_LOCK_TIMEOUT_MS")
 
     environment: str = Field(default="development", alias="ENVIRONMENT")
     cors_origins: str = Field(

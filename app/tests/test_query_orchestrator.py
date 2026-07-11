@@ -8,12 +8,19 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401
+import app.api.routes.queries as query_routes
 from app.api.deps import get_current_user, get_db
 from app.db.base import Base
 from app.main import app
 from app.models.query_log import QueryLog
 from app.models.user import User
 from app.repositories.query_repository import QueryRepository
+from app.schemas.query import AskQueryRequest
+from app.schemas.sql_agent import SqlAgentResult
+from app.schemas.sql_execution import SqlExecutionResult
+from app.schemas.sql_safety import SqlSafetyResult
+from app.services.query_orchestrator_service import QueryOrchestratorService
+from app.services.sql_execution_service import SqlExecutionError, SqlExecutionRejectedError
 
 test_engine = create_engine(
     "sqlite://",
@@ -22,6 +29,72 @@ test_engine = create_engine(
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 client = TestClient(app)
+
+
+class FakeExecutionService:
+    def __init__(
+        self,
+        result: SqlExecutionResult | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.result = result
+        self.error = error
+        self.executed_sql: list[str] = []
+
+    def execute(self, sql: str) -> SqlExecutionResult:
+        self.executed_sql.append(sql)
+        if self.error:
+            raise self.error
+        assert self.result is not None
+        return self.result
+
+
+class FakeAgent:
+    def __init__(self, result: SqlAgentResult | None = None, error: Exception | None = None) -> None:
+        self.result = result
+        self.error = error
+
+    def answer(self, question: str) -> SqlAgentResult:
+        if self.error:
+            raise self.error
+        assert self.result is not None
+        return self.result
+
+
+def make_execution_result() -> SqlExecutionResult:
+    rows = [
+        {"product_name": "Notebook Pro", "total_sold": 128},
+        {"product_name": "Smartwatch X", "total_sold": 96},
+        {"product_name": "Mouse Gamer", "total_sold": 80},
+    ]
+    return SqlExecutionResult(
+        columns=["product_name", "total_sold"],
+        rows=rows,
+        row_count=len(rows),
+        execution_time_ms=17,
+    )
+
+
+def make_agent_result(status: str) -> SqlAgentResult:
+    generated_sql = "SELECT p.name AS product_name, 1 AS total_sold FROM products p LIMIT 3"
+    safety_result = SqlSafetyResult(
+        is_valid=status == "success",
+        reason="Comando DELETE detectado." if status == "blocked" else None,
+        original_sql=generated_sql,
+        normalized_sql=generated_sql,
+        detected_tables=("products",),
+    )
+    return SqlAgentResult(
+        status=status,
+        answer="Provider answer",
+        generated_sql=None if status == "needs_clarification" else generated_sql,
+        provider_used="mock",
+        model_used="mock-datatalk-v1",
+        recognized_intent="top_products" if status == "success" else None,
+        schema_context="products schema",
+        agent_prompt="agent prompt",
+        safety_result=None if status == "needs_clarification" else safety_result,
+    )
 
 
 def override_get_db() -> Generator[Session, None, None]:
@@ -52,7 +125,15 @@ def get_query_logs() -> list[QueryLog]:
         return list(db.scalars(select(QueryLog).order_by(QueryLog.id)))
 
 
-def test_ask_query_generates_safe_sql_and_saves_log() -> None:
+def test_ask_query_executes_safe_sql_summarizes_rows_and_saves_log(monkeypatch: pytest.MonkeyPatch) -> None:
+    execution_service = FakeExecutionService(result=make_execution_result())
+    monkeypatch.setattr(
+        query_routes.query_orchestrator_service,
+        "sql_execution_service",
+        execution_service,
+        raising=False,
+    )
+
     response = client.post("/queries/ask", json={"question": "Quais produtos venderam mais este mes?"})
 
     assert response.status_code == 200
@@ -61,10 +142,17 @@ def test_ask_query_generates_safe_sql_and_saves_log() -> None:
     assert payload["status"] == "success"
     assert payload["generated_sql"].startswith("SELECT")
     assert payload["blocked_reason"] is None
-    assert payload["columns"] == []
-    assert payload["rows"] == []
-    assert payload["chart"] == {"type": "table", "x": None, "y": None}
+    assert payload["columns"] == ["product_name", "total_sold"]
+    assert payload["rows"] == make_execution_result().rows
+    assert payload["answer"] == (
+        "Ranking por total sold: Notebook Pro (128), Smartwatch X (96) e Mouse Gamer (80)."
+    )
+    assert payload["chart"] == {"type": "bar", "x": "product_name", "y": "total_sold"}
     assert payload["metadata"]["provider_used"] == "mock"
+    assert payload["metadata"]["agent_time_ms"] >= 0
+    assert payload["metadata"]["database_time_ms"] == 17
+    assert payload["metadata"]["execution_time_ms"] >= 17
+    assert execution_service.executed_sql == [payload["generated_sql"]]
 
     logs = get_query_logs()
     assert len(logs) == 1
@@ -72,6 +160,118 @@ def test_ask_query_generates_safe_sql_and_saves_log() -> None:
     assert logs[0].status == "success"
     assert logs[0].generated_sql == payload["generated_sql"]
     assert logs[0].blocked_reason is None
+    assert logs[0].answer_summary == payload["answer"]
+    assert logs[0].execution_time_ms == payload["metadata"]["execution_time_ms"]
+
+
+@pytest.mark.parametrize("agent_status", ["blocked", "needs_clarification"])
+def test_orchestrator_never_executes_non_success_agent_results(agent_status: str) -> None:
+    execution_service = FakeExecutionService(result=make_execution_result())
+    service = QueryOrchestratorService(
+        agent=FakeAgent(result=make_agent_result(agent_status)),
+        sql_execution_service=execution_service,
+    )
+
+    with TestingSessionLocal() as db:
+        response = service.ask(db, get_test_user(), AskQueryRequest(question="Pergunta valida"))
+
+    assert response.status == agent_status
+    assert response.columns == []
+    assert response.rows == []
+    assert response.chart.type == "table"
+    assert response.metadata.database_time_ms is None
+    assert execution_service.executed_sql == []
+
+
+def test_orchestrator_logs_controlled_database_error_without_exposing_details() -> None:
+    execution_service = FakeExecutionService(
+        error=SqlExecutionError("password=secret internal database failure")
+    )
+    service = QueryOrchestratorService(
+        agent=FakeAgent(result=make_agent_result("success")),
+        sql_execution_service=execution_service,
+    )
+
+    with TestingSessionLocal() as db:
+        response = service.ask(db, get_test_user(), AskQueryRequest(question="Pergunta valida"))
+
+    assert response.status == "error"
+    assert response.answer == "Não foi possível concluir a consulta com segurança."
+    assert "secret" not in response.answer
+    assert response.columns == []
+    assert response.rows == []
+    assert response.metadata.database_time_ms is None
+
+    logs = get_query_logs()
+    assert len(logs) == 1
+    assert logs[0].status == "error"
+    assert logs[0].answer_summary == response.answer
+    assert "secret" not in (logs[0].answer_summary or "")
+
+
+def test_orchestrator_sanitizes_and_logs_unexpected_execution_error() -> None:
+    execution_service = FakeExecutionService(error=RuntimeError("unexpected secret driver failure"))
+    service = QueryOrchestratorService(
+        agent=FakeAgent(result=make_agent_result("success")),
+        sql_execution_service=execution_service,
+    )
+
+    with TestingSessionLocal() as db:
+        response = service.ask(db, get_test_user(), AskQueryRequest(question="Pergunta valida"))
+
+    assert response.status == "error"
+    assert response.answer == "Não foi possível concluir a consulta com segurança."
+    assert "secret" not in response.answer
+
+    logs = get_query_logs()
+    assert len(logs) == 1
+    assert logs[0].status == "error"
+    assert logs[0].answer_summary == response.answer
+
+
+def test_orchestrator_logs_final_revalidation_rejection_as_blocked() -> None:
+    execution_service = FakeExecutionService(
+        error=SqlExecutionRejectedError("Tabela interna 'users' não pode ser consultada.")
+    )
+    service = QueryOrchestratorService(
+        agent=FakeAgent(result=make_agent_result("success")),
+        sql_execution_service=execution_service,
+    )
+
+    with TestingSessionLocal() as db:
+        response = service.ask(db, get_test_user(), AskQueryRequest(question="Pergunta valida"))
+
+    assert response.status == "blocked"
+    assert response.blocked_reason == "Tabela interna 'users' não pode ser consultada."
+    assert response.columns == []
+    assert response.rows == []
+
+    logs = get_query_logs()
+    assert len(logs) == 1
+    assert logs[0].status == "blocked"
+    assert logs[0].blocked_reason == response.blocked_reason
+
+
+def test_orchestrator_logs_controlled_provider_error() -> None:
+    execution_service = FakeExecutionService(result=make_execution_result())
+    service = QueryOrchestratorService(
+        agent=FakeAgent(error=RuntimeError("provider api key leaked-secret")),
+        sql_execution_service=execution_service,
+    )
+
+    with TestingSessionLocal() as db:
+        response = service.ask(db, get_test_user(), AskQueryRequest(question="Pergunta valida"))
+
+    assert response.status == "error"
+    assert response.answer == "Não foi possível gerar uma consulta segura neste momento."
+    assert "leaked-secret" not in response.answer
+    assert response.generated_sql is None
+    assert execution_service.executed_sql == []
+
+    logs = get_query_logs()
+    assert len(logs) == 1
+    assert logs[0].status == "error"
+    assert logs[0].generated_sql is None
 
 
 def test_ask_query_saves_needs_clarification_without_sql() -> None:
