@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -31,5 +31,19 @@ describe("LoginPage", () => {
     await user.click(screen.getByRole("button", { name: "Entrar no workspace" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Credenciais invalidas.");
+  });
+
+  it("prevents duplicate submissions while login is pending", async () => {
+    let finishLogin: () => void = () => undefined;
+    const onLogin = vi.fn(() => new Promise<void>((resolve) => { finishLogin = resolve; }));
+    const user = userEvent.setup();
+
+    render(<LoginPage onLogin={onLogin} />);
+
+    await user.click(screen.getByRole("button", { name: "Entrar no workspace" }));
+
+    expect(screen.getByRole("button", { name: "Entrando..." })).toBeDisabled();
+    expect(onLogin).toHaveBeenCalledOnce();
+    await act(async () => finishLogin());
   });
 });

@@ -22,8 +22,9 @@ O DataTalk AI foi construido para demonstrar esse equilibrio: experiencia de lin
 - Orquestracao de perguntas, validacao SQL, execucao controlada, resumo, tabela e recomendacao de grafico.
 - Historico de consultas, feedback e metricas por usuario.
 - Frontend React com dashboard, consulta, catalogo, historico e metricas.
+- Visualizacao responsiva dos resultados em barras, linha, pizza, metrica ou tabela, conforme a recomendacao do backend.
 - Ambiente Docker com banco, API e frontend.
-- Testes automatizados para backend e frontend.
+- 172 testes automatizados para backend e frontend.
 
 ## Arquitetura
 
@@ -48,7 +49,10 @@ Query Orchestrator
              PostgreSQL (dados demo)
                    |
                    v
-  Historico, feedback, metricas e resposta ao frontend
+       Result Summarizer + Chart Recommender
+                   |
+                   v
+  Resposta, grafico, tabela, historico, feedback e metricas
 ```
 
 O backend separa rotas, schemas, repositories, services, providers, agentes e modelos. Essa divisao reduz o acoplamento entre a camada HTTP, as regras de seguranca e o acesso aos dados.
@@ -191,7 +195,7 @@ docker compose config
 
 O GitHub Actions executa essas verificacoes automaticamente em cada push e pull request, com jobs independentes para backend, frontend e Docker Compose.
 
-A suite atual cobre health check, autenticacao, catalogo, validator SQL, provider mock, agente, orquestracao, historico, feedback e metricas no backend. No frontend, cobre login, exibicao de status, formatacao, envio de consulta e feedback.
+A suite atual possui 172 testes: 147 no backend e 25 no frontend. O backend cobre health check, autenticacao, catalogo, validator SQL, provider mock, agente, execucao controlada, orquestracao, historico, feedback e metricas. O frontend cobre restauracao e invalidacao de sessao, login, navegacao protegida, estados de carregamento, consultas aprovadas, bloqueadas e ambiguas, falhas de API, feedback, formatacao e visualizacoes em barras, linha, pizza, metrica e tabela.
 
 ## Limites atuais e roadmap
 

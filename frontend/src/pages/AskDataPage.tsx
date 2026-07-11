@@ -2,6 +2,7 @@ import { Check, Copy, Send, ShieldAlert, ThumbsDown, ThumbsUp } from "lucide-rea
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { EmptyState } from "../components/EmptyState";
+import { QueryResultVisualization } from "../components/QueryResultVisualization";
 import { StatusBadge } from "../components/StatusBadge";
 import { askQuestion, getApiErrorMessage, submitFeedback } from "../lib/api";
 import { formatDuration } from "../lib/format";
@@ -158,6 +159,8 @@ export function AskDataPage(): JSX.Element {
             </article>
           )}
 
+          <QueryResultVisualization columns={result.columns} rows={result.rows} chart={result.chart} />
+
           {result.columns.length > 0 && (
             <article className="overflow-hidden rounded-lg border border-line bg-panel shadow-panel">
               <div className="border-b border-line px-5 py-3">
@@ -176,6 +179,7 @@ export function AskDataPage(): JSX.Element {
                     ))}
                   </tbody>
                 </table>
+                {result.rows.length === 0 && <p className="px-5 py-6 text-center text-sm text-slate-500">Nenhum registro encontrado.</p>}
               </div>
             </article>
           )}
