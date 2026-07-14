@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.agents.sql_agent import DataAnalystSqlAgent
 from app.core.config import settings
 from app.models.user import User
+from app.providers.base import LlmProviderError
 from app.repositories.query_repository import QueryRepository
 from app.schemas.query import AskQueryRequest, AskQueryResponse, ChartSuggestion, QueryResponseMetadata
 from app.services.chart_service import ChartRecommendationService
@@ -37,6 +38,21 @@ class QueryOrchestratorService:
         agent_started_at = perf_counter()
         try:
             agent_result = self.agent.answer(request.question)
+        except LlmProviderError as error:
+            agent_time_ms = self._elapsed_ms(agent_started_at)
+            return self._persist_response(
+                db,
+                current_user=current_user,
+                request=request,
+                started_at=started_at,
+                status="error",
+                answer="Nao foi possivel gerar uma consulta segura neste momento.",
+                generated_sql=None,
+                blocked_reason=None,
+                provider_used=error.provider_used,
+                model_used=error.model_used,
+                agent_time_ms=agent_time_ms,
+            )
         except Exception:
             agent_time_ms = self._elapsed_ms(agent_started_at)
             return self._persist_response(

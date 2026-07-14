@@ -1,3 +1,5 @@
+from langchain_core.runnables import RunnableSequence
+
 from app.agents.prompts import build_sql_agent_prompt
 from app.agents.sql_agent import DataAnalystSqlAgent
 from app.schemas.llm_provider import LlmProviderResult
@@ -7,7 +9,7 @@ class UnsafeProvider:
     name = "unsafe-test"
     model_name = "unsafe-test-model"
 
-    def generate(self, question: str) -> LlmProviderResult:
+    def generate(self, question: str, *, prompt: str | None = None) -> LlmProviderResult:
         return LlmProviderResult(
             status="success",
             answer="Unsafe SQL generated for testing.",
@@ -16,6 +18,36 @@ class UnsafeProvider:
             model_used=self.model_name,
             recognized_intent="unsafe_delete",
         )
+
+
+class PromptCapturingProvider:
+    name = "prompt-capturing-test"
+    model_name = "prompt-capturing-model"
+
+    def __init__(self) -> None:
+        self.received_prompt: str | None = None
+
+    def generate(self, question: str, *, prompt: str | None = None) -> LlmProviderResult:
+        self.received_prompt = prompt
+        return LlmProviderResult(
+            status="needs_clarification",
+            answer="Teste de prompt.",
+            generated_sql=None,
+            provider_used=self.name,
+            model_used=self.model_name,
+            recognized_intent=None,
+        )
+
+
+def test_sql_agent_uses_named_langchain_sequence() -> None:
+    agent = DataAnalystSqlAgent()
+
+    assert isinstance(agent.chain, RunnableSequence)
+    assert [step.get_name() for step in agent.chain.steps] == [
+        "prepare_sql_context",
+        "generate_sql",
+        "validate_sql",
+    ]
 
 
 def test_sql_agent_lists_only_queryable_tables() -> None:
@@ -79,3 +111,14 @@ def test_sql_agent_schema_context_excludes_internal_tables() -> None:
     assert "users" not in schema_context
     assert "query_logs" not in schema_context
     assert "query_feedback" not in schema_context
+
+
+def test_sql_agent_sends_safety_rules_and_schema_to_provider() -> None:
+    provider = PromptCapturingProvider()
+
+    DataAnalystSqlAgent(provider=provider).answer("Quais produtos venderam mais?")
+
+    assert provider.received_prompt is not None
+    assert "Gere apenas consultas SELECT." in provider.received_prompt
+    assert "products" in provider.received_prompt
+    assert "Quais produtos venderam mais?" in provider.received_prompt

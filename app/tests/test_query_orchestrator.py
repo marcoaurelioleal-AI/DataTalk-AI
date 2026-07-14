@@ -14,6 +14,7 @@ from app.db.base import Base
 from app.main import app
 from app.models.query_log import QueryLog
 from app.models.user import User
+from app.providers.base import LlmProviderError
 from app.repositories.query_repository import QueryRepository
 from app.schemas.query import AskQueryRequest
 from app.schemas.sql_agent import SqlAgentResult
@@ -255,7 +256,16 @@ def test_orchestrator_logs_final_revalidation_rejection_as_blocked() -> None:
 def test_orchestrator_logs_controlled_provider_error() -> None:
     execution_service = FakeExecutionService(result=make_execution_result())
     service = QueryOrchestratorService(
-        agent=FakeAgent(error=RuntimeError("provider api key leaked-secret")),
+        agent=FakeAgent(
+            error=LlmProviderError(
+                "safe provider failure",
+                provider_used="gemini",
+                model_used="gemini-2.5-flash",
+                category="unavailable",
+                retryable=True,
+                attempts=3,
+            )
+        ),
         sql_execution_service=execution_service,
     )
 
@@ -263,15 +273,19 @@ def test_orchestrator_logs_controlled_provider_error() -> None:
         response = service.ask(db, get_test_user(), AskQueryRequest(question="Pergunta valida"))
 
     assert response.status == "error"
-    assert response.answer == "Não foi possível gerar uma consulta segura neste momento."
+    assert response.answer == "Nao foi possivel gerar uma consulta segura neste momento."
     assert "leaked-secret" not in response.answer
     assert response.generated_sql is None
+    assert response.metadata.provider_used == "gemini"
+    assert response.metadata.model_used == "gemini-2.5-flash"
     assert execution_service.executed_sql == []
 
     logs = get_query_logs()
     assert len(logs) == 1
     assert logs[0].status == "error"
     assert logs[0].generated_sql is None
+    assert logs[0].provider_used == "gemini"
+    assert logs[0].model_used == "gemini-2.5-flash"
 
 
 def test_ask_query_saves_needs_clarification_without_sql() -> None:

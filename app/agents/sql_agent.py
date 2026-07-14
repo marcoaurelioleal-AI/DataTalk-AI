@@ -1,11 +1,29 @@
+from typing import TypedDict
+
+from langchain_core.runnables import RunnableLambda
+
 from app.agents.prompts import build_sql_agent_prompt, render_schema_context
 from app.providers.base import LlmProvider
 from app.providers.factory import get_llm_provider
 from app.schemas.catalog import CatalogTableSchema, CatalogTableSummary
+from app.schemas.llm_provider import LlmProviderResult
 from app.schemas.sql_agent import SqlAgentResult
 from app.schemas.sql_safety import SqlSafetyResult
 from app.services.catalog_service import CatalogService
 from app.services.sql_safety_service import SqlSafetyService
+
+
+class SqlChainInput(TypedDict):
+    question: str
+
+
+class PreparedSqlContext(SqlChainInput):
+    schema_context: str
+    agent_prompt: str
+
+
+class GeneratedSqlContext(PreparedSqlContext):
+    provider_result: LlmProviderResult
 
 
 class DataAnalystSqlAgent:
@@ -18,6 +36,11 @@ class DataAnalystSqlAgent:
         self.provider = provider or get_llm_provider()
         self.catalog_service = catalog_service or CatalogService()
         self.safety_service = safety_service or SqlSafetyService()
+        self.chain = (
+            RunnableLambda(self._prepare_sql_context, name="prepare_sql_context")
+            | RunnableLambda(self._generate_sql, name="generate_sql")
+            | RunnableLambda(self._validate_sql, name="validate_sql")
+        )
 
     def list_tables_tool(self) -> list[CatalogTableSummary]:
         return self.catalog_service.list_tables()
@@ -25,8 +48,8 @@ class DataAnalystSqlAgent:
     def get_schema_tool(self, table_name: str) -> CatalogTableSchema:
         return self.catalog_service.get_table_schema(table_name)
 
-    def generate_sql_tool(self, question: str):
-        return self.provider.generate(question)
+    def generate_sql_tool(self, question: str, prompt: str | None = None):
+        return self.provider.generate(question, prompt=prompt)
 
     def validate_sql_tool(self, sql: str) -> SqlSafetyResult:
         return self.safety_service.validate(sql)
@@ -39,9 +62,40 @@ class DataAnalystSqlAgent:
         return build_sql_agent_prompt(question, self.build_schema_context(), self.safety_service.max_rows)
 
     def answer(self, question: str) -> SqlAgentResult:
+        return self.chain.invoke(
+            {"question": question},
+            config={
+                "tags": ["datatalk-sql-agent"],
+                "metadata": {"provider": self.provider.name, "model": self.provider.model_name},
+            },
+        )
+
+    def _prepare_sql_context(self, chain_input: SqlChainInput) -> PreparedSqlContext:
+        question = chain_input["question"]
         schema_context = self.build_schema_context()
-        agent_prompt = build_sql_agent_prompt(question, schema_context, self.safety_service.max_rows)
-        provider_result = self.generate_sql_tool(question)
+        return {
+            "question": question,
+            "schema_context": schema_context,
+            "agent_prompt": build_sql_agent_prompt(
+                question,
+                schema_context,
+                self.safety_service.max_rows,
+            ),
+        }
+
+    def _generate_sql(self, context: PreparedSqlContext) -> GeneratedSqlContext:
+        return {
+            **context,
+            "provider_result": self.generate_sql_tool(
+                context["question"],
+                context["agent_prompt"],
+            ),
+        }
+
+    def _validate_sql(self, context: GeneratedSqlContext) -> SqlAgentResult:
+        provider_result = context["provider_result"]
+        schema_context = context["schema_context"]
+        agent_prompt = context["agent_prompt"]
 
         if provider_result.generated_sql is None:
             return SqlAgentResult(

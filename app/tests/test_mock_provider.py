@@ -1,6 +1,8 @@
 import pytest
 
+import app.providers.factory as provider_factory
 from app.providers.factory import UnsupportedLlmProviderError, get_llm_provider
+from app.providers.gemini_provider import GeminiProvider
 from app.providers.mock_provider import MockProvider
 from app.services.sql_safety_service import SqlSafetyService
 
@@ -84,6 +86,16 @@ def test_factory_returns_mock_provider() -> None:
     assert isinstance(provider, MockProvider)
 
 
-def test_factory_rejects_provider_not_implemented_yet() -> None:
+def test_factory_returns_configured_gemini_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(provider_factory.settings, "gemini_api_key", "test-api-key")
+    monkeypatch.setattr(provider_factory.settings, "gemini_chat_model", "gemini-test")
+
+    provider = get_llm_provider("gemini")
+
+    assert isinstance(provider, GeminiProvider)
+    assert provider.model_name == "gemini-test"
+
+
+def test_factory_rejects_unknown_provider() -> None:
     with pytest.raises(UnsupportedLlmProviderError, match="is not implemented"):
-        get_llm_provider("gemini")
+        get_llm_provider("unknown")

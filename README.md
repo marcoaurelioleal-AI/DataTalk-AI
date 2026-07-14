@@ -18,13 +18,14 @@ O DataTalk AI foi construido para demonstrar esse equilibrio: experiencia de lin
 - Autenticacao JWT, cadastro, login e rotas protegidas.
 - Seed idempotente com usuarios demo e dados de e-commerce.
 - Catalogo de tabelas e schemas que respeita a allowlist de consulta.
-- Geracao deterministica com provider `mock`, adequada para desenvolvimento e testes sem chave de API.
+- Providers `mock` e Gemini selecionaveis por ambiente, com timeout, retry controlado e telemetria segura no provider real.
+- Cadeia LangChain LCEL com etapas nomeadas para contexto, geracao e validacao de SQL.
 - Orquestracao de perguntas, validacao SQL, execucao controlada, resumo, tabela e recomendacao de grafico.
 - Historico de consultas, feedback e metricas por usuario.
 - Frontend React com dashboard, consulta, catalogo, historico e metricas.
 - Visualizacao responsiva dos resultados em barras, linha, pizza, metrica ou tabela, conforme a recomendacao do backend.
 - Ambiente Docker com banco, API e frontend.
-- 172 testes automatizados para backend e frontend.
+- 188 testes automatizados para backend e frontend.
 
 ## Arquitetura
 
@@ -40,10 +41,10 @@ FastAPI (API REST + JWT)
   v
 Query Orchestrator
   |
-  +--> Data Analyst SQL Agent + Mock Provider
-  |              |
-  |              v
-  +------> SQL Safety Validator
+  +--> LangChain SQL Agent (LCEL)
+  |       contexto -> provider -> validator
+  |                              |
+  +------------------------------+
                    |
                    v
              PostgreSQL (dados demo)
@@ -79,7 +80,7 @@ Essas regras sao uma segunda camada de defesa: mesmo que um provider gere uma co
 | Backend | Python, FastAPI, Pydantic, SQLAlchemy, Alembic, Psycopg |
 | Banco | PostgreSQL 16 |
 | Autenticacao | JWT e hash PBKDF2 |
-| IA no MVP | Provider `mock` e contrato de agente SQL |
+| IA no MVP | LangChain Core (LCEL), providers `mock` e Gemini com saida estruturada |
 | Frontend | React, TypeScript, Vite, Tailwind CSS, Axios, Recharts, Lucide |
 | Qualidade | Pytest, Vitest, React Testing Library |
 | Infraestrutura | Docker e Docker Compose |
@@ -128,6 +129,23 @@ uvicorn app.main:app --reload
 ```
 
 Em um ambiente local, ajuste `DATABASE_URL` no `.env` para apontar para uma instancia PostgreSQL disponivel.
+
+### Ativar o Gemini
+
+O provider `mock` permanece como padrao. Para usar sua chave do Google Gemini, configure somente o arquivo local `.env`:
+
+```dotenv
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=sua_chave_aqui
+GEMINI_CHAT_MODEL=gemini-2.5-flash
+LLM_REQUEST_TIMEOUT_SECONDS=30
+LLM_MAX_RETRIES=2
+LLM_RETRY_BACKOFF_SECONDS=0.25
+```
+
+O mesmo `.env` e interpolado pelo Docker Compose. A chave e usada apenas pela API, nunca e enviada ao frontend e nao deve ser adicionada ao Git. O arquivo `.gitignore` bloqueia `.env` e suas variacoes locais.
+
+O provider tenta novamente apenas falhas transitorias, como timeout, limite de requisicoes (`429`) e indisponibilidade (`5xx`). Erros permanentes de autenticacao ou requisicao nao sao repetidos. Cada chamada emite um evento JSON com provider, modelo, status, tentativas, latencia e categoria do erro, sem registrar a pergunta, o prompt, o SQL ou a chave.
 
 ### Frontend
 
@@ -195,15 +213,15 @@ docker compose config
 
 O GitHub Actions executa essas verificacoes automaticamente em cada push e pull request, com jobs independentes para backend, frontend e Docker Compose.
 
-A suite atual possui 172 testes: 147 no backend e 25 no frontend. O backend cobre health check, autenticacao, catalogo, validator SQL, provider mock, agente, execucao controlada, orquestracao, historico, feedback e metricas. O frontend cobre restauracao e invalidacao de sessao, login, navegacao protegida, estados de carregamento, consultas aprovadas, bloqueadas e ambiguas, falhas de API, feedback, formatacao e visualizacoes em barras, linha, pizza, metrica e tabela.
+A suite atual possui 188 testes: 163 no backend e 25 no frontend. Ela cobre health check, autenticacao, catalogo, validator SQL, providers mock e Gemini, resiliencia e telemetria do provider, cadeia LangChain, agente, execucao controlada, orquestracao, historico, feedback e metricas no backend. No frontend, cobre restauracao e invalidacao de sessao, login, navegacao protegida, estados de carregamento, consultas aprovadas, bloqueadas e ambiguas, falhas de API, feedback, formatacao e visualizacoes em barras, linha, pizza, metrica e tabela.
 
 ## Limites atuais e roadmap
 
-O MVP implementa o provider `mock`. O contrato do agente foi preparado para evoluir sem alterar as barreiras de seguranca, mas Gemini, OpenAI, uma cadeia LangChain completa, LangGraph e LlamaIndex ainda nao estao integrados.
+O projeto implementa uma cadeia LangChain LCEL e os providers `mock` e Gemini. A cadeia prepara o schema permitido, monta o prompt seguro, chama o provider e encerra no `SqlSafetyService`. A execucao permanece fora da cadeia e passa por uma segunda validacao no `SqlExecutionService`. OpenAI, LangGraph e LlamaIndex ainda nao estao integrados.
 
 Proximas evolucoes planejadas:
 
-1. Integracao de providers Gemini e OpenAI com configuracao por ambiente.
+1. Integracao do provider OpenAI com configuracao por ambiente.
 2. Fluxo LangGraph para classificar, gerar, validar, executar e resumir consultas como etapas observaveis.
 3. Recuperacao de conhecimento nao estruturado com LlamaIndex.
 4. Observabilidade avancada, tracing e monitoramento de erros.

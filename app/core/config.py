@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(default=60, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
 
     llm_provider: str = Field(default="mock", alias="LLM_PROVIDER")
-    gemini_api_key: str = Field(default="your_gemini_key_here", alias="GEMINI_API_KEY")
+    llm_request_timeout_seconds: float = Field(default=30, gt=0, alias="LLM_REQUEST_TIMEOUT_SECONDS")
+    llm_max_retries: int = Field(default=2, ge=0, le=5, alias="LLM_MAX_RETRIES")
+    llm_retry_backoff_seconds: float = Field(default=0.25, ge=0, alias="LLM_RETRY_BACKOFF_SECONDS")
+    gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
     gemini_chat_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_CHAT_MODEL")
     openai_api_key: str = Field(default="your_openai_key_here", alias="OPENAI_API_KEY")
     openai_chat_model: str = Field(default="gpt-4o-mini", alias="OPENAI_CHAT_MODEL")

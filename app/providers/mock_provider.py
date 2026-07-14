@@ -86,7 +86,7 @@ class MockProvider:
         if not 1 <= self.default_limit <= settings.query_max_rows:
             raise ValueError(f"default_limit must be between 1 and {settings.query_max_rows}.")
 
-    def generate(self, question: str) -> LlmProviderResult:
+    def generate(self, question: str, *, prompt: str | None = None) -> LlmProviderResult:
         normalized_question = self._normalize_question(question)
         for scenario in MOCK_SCENARIOS:
             if scenario.matches(normalized_question):
