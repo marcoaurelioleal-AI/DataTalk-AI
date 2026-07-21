@@ -1,5 +1,6 @@
 from langchain_core.runnables import RunnableSequence
 
+from app.agents.langgraph_workflow import SqlAgentWorkflow
 from app.agents.prompts import build_sql_agent_prompt
 from app.agents.sql_agent import DataAnalystSqlAgent
 from app.schemas.llm_provider import LlmProviderResult
@@ -48,6 +49,13 @@ def test_sql_agent_uses_named_langchain_sequence() -> None:
         "generate_sql",
         "validate_sql",
     ]
+
+
+def test_sql_agent_answers_through_langgraph_workflow() -> None:
+    agent = DataAnalystSqlAgent()
+
+    assert isinstance(agent.workflow, SqlAgentWorkflow)
+    assert agent.workflow.graph.get_name() == "datatalk_sql_agent"
 
 
 def test_sql_agent_lists_only_queryable_tables() -> None:

@@ -20,12 +20,13 @@ O DataTalk AI foi construido para demonstrar esse equilibrio: experiencia de lin
 - Catalogo de tabelas e schemas que respeita a allowlist de consulta.
 - Providers `mock` e Gemini selecionaveis por ambiente, com timeout, retry controlado e telemetria segura no provider real.
 - Cadeia LangChain LCEL com etapas nomeadas para contexto, geracao e validacao de SQL.
+- Workflow LangGraph compilado para executar contexto, geracao e validacao, com rotas explicitas para sucesso, bloqueio e esclarecimento.
 - Orquestracao de perguntas, validacao SQL, execucao controlada, resumo, tabela e recomendacao de grafico.
 - Historico de consultas, feedback e metricas por usuario.
 - Frontend React com dashboard, consulta, catalogo, historico e metricas.
 - Visualizacao responsiva dos resultados em barras, linha, pizza, metrica ou tabela, conforme a recomendacao do backend.
 - Ambiente Docker com banco, API e frontend.
-- 188 testes automatizados para backend e frontend.
+- 193 testes automatizados para backend e frontend.
 
 ## Arquitetura
 
@@ -41,8 +42,10 @@ FastAPI (API REST + JWT)
   v
 Query Orchestrator
   |
-  +--> LangChain SQL Agent (LCEL)
+  +--> LangGraph + LangChain SQL Agent (LCEL)
   |       contexto -> provider -> validator
+  |                                  |
+  |                    success | blocked | needs_clarification
   |                              |
   +------------------------------+
                    |
@@ -80,7 +83,7 @@ Essas regras sao uma segunda camada de defesa: mesmo que um provider gere uma co
 | Backend | Python, FastAPI, Pydantic, SQLAlchemy, Alembic, Psycopg |
 | Banco | PostgreSQL 16 |
 | Autenticacao | JWT e hash PBKDF2 |
-| IA no MVP | LangChain Core (LCEL), providers `mock` e Gemini com saida estruturada |
+| IA no MVP | LangGraph, LangChain Core (LCEL), providers `mock` e Gemini com saida estruturada |
 | Frontend | React, TypeScript, Vite, Tailwind CSS, Axios, Recharts, Lucide |
 | Qualidade | Pytest, Vitest, React Testing Library |
 | Infraestrutura | Docker e Docker Compose |
@@ -213,16 +216,16 @@ docker compose config
 
 O GitHub Actions executa essas verificacoes automaticamente em cada push e pull request, com jobs independentes para backend, frontend e Docker Compose.
 
-A suite atual possui 188 testes: 163 no backend e 25 no frontend. Ela cobre health check, autenticacao, catalogo, validator SQL, providers mock e Gemini, resiliencia e telemetria do provider, cadeia LangChain, agente, execucao controlada, orquestracao, historico, feedback e metricas no backend. No frontend, cobre restauracao e invalidacao de sessao, login, navegacao protegida, estados de carregamento, consultas aprovadas, bloqueadas e ambiguas, falhas de API, feedback, formatacao e visualizacoes em barras, linha, pizza, metrica e tabela.
+A suite atual possui 193 testes: 168 no backend e 25 no frontend. Ela cobre health check, autenticacao, catalogo, validator SQL, providers mock e Gemini, resiliencia e telemetria do provider, cadeia LangChain, roteamento condicional do workflow LangGraph, agente, execucao controlada, orquestracao, historico, feedback e metricas no backend. No frontend, cobre restauracao e invalidacao de sessao, login, navegacao protegida, estados de carregamento, consultas aprovadas, bloqueadas e ambiguas, falhas de API, feedback, formatacao e visualizacoes em barras, linha, pizza, metrica e tabela.
 
 ## Limites atuais e roadmap
 
-O projeto implementa uma cadeia LangChain LCEL e os providers `mock` e Gemini. A cadeia prepara o schema permitido, monta o prompt seguro, chama o provider e encerra no `SqlSafetyService`. A execucao permanece fora da cadeia e passa por uma segunda validacao no `SqlExecutionService`. OpenAI, LangGraph e LlamaIndex ainda nao estao integrados.
+O projeto implementa uma cadeia LangChain LCEL, um workflow LangGraph com rotas condicionais e os providers `mock` e Gemini. O grafo prepara o schema permitido, monta o prompt seguro, chama o provider, valida o SQL e direciona o resultado para sucesso, bloqueio ou pedido de esclarecimento. A execucao permanece fora do grafo e passa por uma segunda validacao no `SqlExecutionService`. OpenAI e LlamaIndex ainda nao estao integrados.
 
 Proximas evolucoes planejadas:
 
-1. Integracao do provider OpenAI com configuracao por ambiente.
-2. Fluxo LangGraph para classificar, gerar, validar, executar e resumir consultas como etapas observaveis.
+1. Incorporar a execucao controlada como etapa observavel somente na rota de sucesso, preservando a segunda validacao obrigatoria.
+2. Incorporar resumo e recomendacao de grafico como etapas posteriores a uma execucao aprovada.
 3. Recuperacao de conhecimento nao estruturado com LlamaIndex.
 4. Observabilidade avancada, tracing e monitoramento de erros.
 5. Preparacao para deploy cloud com ambientes e secrets gerenciados.

@@ -2,6 +2,7 @@ from typing import TypedDict
 
 from langchain_core.runnables import RunnableLambda
 
+from app.agents.langgraph_workflow import SqlAgentWorkflow
 from app.agents.prompts import build_sql_agent_prompt, render_schema_context
 from app.providers.base import LlmProvider
 from app.providers.factory import get_llm_provider
@@ -36,10 +37,14 @@ class DataAnalystSqlAgent:
         self.provider = provider or get_llm_provider()
         self.catalog_service = catalog_service or CatalogService()
         self.safety_service = safety_service or SqlSafetyService()
-        self.chain = (
-            RunnableLambda(self._prepare_sql_context, name="prepare_sql_context")
-            | RunnableLambda(self._generate_sql, name="generate_sql")
-            | RunnableLambda(self._validate_sql, name="validate_sql")
+        self.prepare_step = RunnableLambda(self._prepare_sql_context, name="prepare_sql_context")
+        self.generate_step = RunnableLambda(self._generate_sql, name="generate_sql")
+        self.validate_step = RunnableLambda(self._validate_sql, name="validate_sql")
+        self.chain = self.prepare_step | self.generate_step | self.validate_step
+        self.workflow = SqlAgentWorkflow(
+            prepare_step=self.prepare_step,
+            generate_step=self.generate_step,
+            validate_step=self.validate_step,
         )
 
     def list_tables_tool(self) -> list[CatalogTableSummary]:
@@ -62,7 +67,7 @@ class DataAnalystSqlAgent:
         return build_sql_agent_prompt(question, self.build_schema_context(), self.safety_service.max_rows)
 
     def answer(self, question: str) -> SqlAgentResult:
-        return self.chain.invoke(
+        return self.workflow.invoke(
             {"question": question},
             config={
                 "tags": ["datatalk-sql-agent"],
